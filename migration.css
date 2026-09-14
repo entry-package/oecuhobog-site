@@ -18,3 +18,5 @@
 }
 
 .migration-contact-notice{margin:16px 0;padding:12px 16px;border:1px solid #ddd;background:#fff;color:#222;font-size:15px;line-height:1.7;text-align:left}.migration-contact-notice a{color:#005b95;text-decoration:underline;overflow-wrap:anywhere}
+
+.receiver-consent{color:#333;display:flex;gap:8px;align-items:flex-start;font-size:14px;line-height:1.7;margin-top:14px;text-align:left}.receiver-consent input{width:auto!important;min-width:18px;height:18px;margin-top:4px}.receiver-help{color:#333;font-size:14px;line-height:1.7;margin:12px 0}

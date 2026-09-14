@@ -2,6 +2,7 @@
 (()=>{
  function previewMessage(el){
   if(!el)return;
+  if(window.OecuhobogReceiver){window.OecuhobogReceiver.submitElement(el);return;}
   let note=el.querySelector('[role=status]');
   if(!note){note=document.createElement('p');note.setAttribute('role','status');el.append(note);}
   if(el.matches('.s-email-form')||el.closest('.s-email-form')){
