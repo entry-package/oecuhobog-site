@@ -1,22 +1,28 @@
-/* GAS 受付接続。実際の接続先は prepare-receiver-preview.py で設定する。 */
+/* 受付の保存結果を確認し、フォーム内に表示する。 */
 (() => {
   'use strict';
-  const endpoint = "https://script.google.com/macros/s/AKfycbz26G8W0ivNCaDb_bs7KqIKNkutZUgAIXsdKv1lt3A7K4m26CS2Tzop9Micz6wR1MrV/exec";
-  const previous = new WeakMap();
-  function status(el, text) {
+  const endpoint = 'https://script.google.com/macros/s/AKfycbz26G8W0ivNCaDb_bs7KqIKNkutZUgAIXsdKv1lt3A7K4m26CS2Tzop9Micz6wR1MrV/exec';
+  const requests = new WeakMap();
+  function status(el, text, state) {
     let note = el.querySelector('[role="status"]');
     if (!note) { note = document.createElement('p'); note.setAttribute('role','status'); el.append(note); }
+    note.className = 'receiver-status';
+    note.dataset.state = state;
     note.textContent = text;
   }
-  function submitElement(el) {
-    if (!/^https:\/\/script\.google\.com\/(?:a\/macros\/package-inc\.com|macros)\/s\/[A-Za-z0-9_-]+\/exec$/.test(endpoint)) {
-      status(el, 'フォームの受付は準備中です。info@package-inc.comへメールでお問い合わせください。');
-      return;
-    }
+  function busy(el, active) {
+    el.setAttribute('aria-busy', String(active));
+    el.querySelectorAll('button').forEach(button => {
+      if (active) { button.dataset.originalText = button.textContent; button.disabled = true; button.textContent = '送信中…'; }
+      else { button.disabled = false; button.textContent = button.dataset.originalText || button.textContent; }
+    });
+  }
+  async function submitElement(el) {
+    if (el.getAttribute('aria-busy') === 'true') return;
     const value = selector => el.querySelector(selector)?.value?.trim() || '';
     const kind = el.matches('.s-email-form') ? 'contact' : el.matches('.s-blog-subscription') ? 'subscription' : 'comment';
     if (kind === 'subscription' && !el.querySelector('[name="readerConsent"]:checked')) {
-      status(el, '読者登録申請への同意にチェックしてください。'); return;
+      status(el, '読者登録申請への同意にチェックしてください。', 'error'); return;
     }
     const fields = {
       kind,
@@ -29,21 +35,35 @@
       website: value('[name="website"]'),
     };
     if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(fields.email) || (kind !== 'subscription' && (!fields.name || !fields.message))) {
-      status(el, 'お名前・メールアドレス・本文を確認してください。'); return;
+      status(el, 'お名前・メールアドレス・本文を確認してください。', 'error'); return;
     }
     const fingerprint = JSON.stringify(fields);
-    let pending = previous.get(el);
-    if (!pending || pending.fingerprint !== fingerprint) { pending = {fingerprint, requestId: crypto.randomUUID()}; previous.set(el,pending); }
-    fields.requestId = pending.requestId;
-    const form = document.createElement('form');
-    form.action = endpoint; form.method = 'POST'; form.target = '_blank'; form.rel = 'noopener'; form.hidden = true;
-    for (const [name, value] of Object.entries(fields)) {
-      const input = document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.append(input);
+    let pending = requests.get(el);
+    if (!pending || pending.fingerprint !== fingerprint) {
+      pending = {fingerprint, requestId: crypto.randomUUID()}; requests.set(el, pending);
     }
-    document.body.append(form);
-    form.submit();
-    form.remove();
-    status(el, '別のタブに受付結果が表示されます。受付番号が表示されていることをご確認ください。');
+    if (pending.completed) { status(el, pending.message, pending.state); return; }
+    busy(el, true); status(el, '送信しています。このままお待ちください。', 'sending');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 45000);
+    try {
+      const response = await fetch(endpoint, {
+        method:'POST', credentials:'omit', redirect:'follow', signal:controller.signal,
+        body:new URLSearchParams({...fields, requestId:pending.requestId, format:'json'}),
+      });
+      if (!response.ok) throw new Error('unconfirmed');
+      const result = await response.json();
+      if (!result.saved || result.receipt !== pending.requestId || result.kind !== kind || typeof result.notified !== 'boolean') throw new Error('unconfirmed');
+      let message = kind === 'comment' ? 'コメントを受け付けました。内容確認後に掲載します。' :
+        kind === 'subscription' ? '読者登録の申請を受け付けました。配信開始までに確認が必要です。' :
+          'お問い合わせを受け付けました。内容を確認のうえ、担当者からご連絡します。';
+      if (!result.notified) message += ' 受付内容は保存されていますが、担当者への通知を確認できていません。お急ぎの場合は info@package-inc.com へご連絡ください。';
+      message += ' 受付番号：' + result.receipt;
+      pending.completed = true; pending.message = message; pending.state = result.notified ? 'success' : 'warning';
+      status(el, message, pending.state);
+    } catch (_) {
+      status(el, '受付結果を確認できませんでした。入力内容は残っています。そのまま再度送信してください。お急ぎの場合は info@package-inc.com へご連絡ください。', 'error');
+    } finally { clearTimeout(timer); busy(el, false); }
   }
   window.OecuhobogReceiver = Object.freeze({submitElement});
 })();
