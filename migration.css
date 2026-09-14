@@ -16,3 +16,5 @@
  .migration-menu-open .s-navbar-desktop-normal { display: flex !important; position: fixed !important; top: 60px !important; left: 0 !important; width: 260px !important; height: calc(100dvh - 60px) !important; overflow-y: auto; z-index: 99999; background: white; }
  .migration-menu-open .s-navbar-desktop-normal .s-nav-inner { margin-top: 0 !important; }
 }
+
+.migration-contact-notice{margin:16px 0;padding:12px 16px;border:1px solid #ddd;background:#fff;color:#222;font-size:15px;line-height:1.7;text-align:left}.migration-contact-notice a{color:#005b95;text-decoration:underline;overflow-wrap:anywhere}

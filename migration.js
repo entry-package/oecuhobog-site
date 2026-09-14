@@ -1,8 +1,20 @@
 /* Local replacements for the original site's presentation-only widgets. */
 (()=>{
- function previewMessage(el){if(!el)return;let note=el.querySelector('[role=status]');if(!note){note=document.createElement('p');note.setAttribute('role','status');el.append(note);}note.textContent='確認用サイトのため、送信は行われません。';}
+ function previewMessage(el){
+  if(!el)return;
+  let note=el.querySelector('[role=status]');
+  if(!note){note=document.createElement('p');note.setAttribute('role','status');el.append(note);}
+  if(el.matches('.s-email-form')||el.closest('.s-email-form')){
+   note.textContent='フォームでの受付は現在準備中です。メールでお問い合わせください：';
+   const link=document.createElement('a');link.href='mailto:info@package-inc.com';link.textContent='info@package-inc.com';note.append(link);
+  }else if(el.matches('.s-blog-subscription')||el.closest('.s-blog-subscription')){
+   note.textContent='読者登録の新規受付は現在停止しています。登録は完了していません。';
+  }else{
+   note.textContent='コメントの新規受付は現在停止しています。投稿は送信されていません。';
+  }
+ }
  document.querySelectorAll('form').forEach(form=>form.addEventListener('submit',e=>{e.preventDefault();previewMessage(form);}));
- document.querySelectorAll('.s-email-form-button,.s-blog-subscribe-btn,.s-blog-comment-form .commit-button').forEach(button=>button.addEventListener('click',e=>{e.preventDefault();previewMessage(button.closest('.s-email-form,form,.s-blog-subscription'));}));
+ document.querySelectorAll('.s-email-form-button,.s-blog-subscribe-btn,.s-blog-comment-form .commit-button').forEach(button=>button.addEventListener('click',e=>{e.preventDefault();previewMessage(button.closest('.s-email-form,form,.s-blog-subscription,.s-blog-comment-form'));}));
  document.querySelectorAll('.s-blog-comment-form textarea').forEach(el=>el.addEventListener('focus',()=>el.closest('form').classList.add('expanded')));
  document.querySelectorAll('.cancel-button').forEach(el=>el.addEventListener('click',()=>el.closest('form')?.classList.remove('expanded')));
  document.querySelectorAll('[data-paginated]').forEach(list=>{
