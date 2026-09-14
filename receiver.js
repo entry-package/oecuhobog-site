@@ -1,7 +1,7 @@
 /* 受付の保存結果を確認し、フォーム内に表示する。 */
 (() => {
   'use strict';
-  const endpoint = 'https://script.google.com/macros/s/AKfycbz26G8W0ivNCaDb_bs7KqIKNkutZUgAIXsdKv1lt3A7K4m26CS2Tzop9Micz6wR1MrV/exec';
+  const endpoint = 'https://script.google.com/macros/s/AKfycbzmHWKRsZ-dXaVU1sQqOcDW6tDToC82-dPK_w-MeSSFR43cK5fkMRYlAOdLa6k9-w/exec';
   const requests = new WeakMap();
   function status(el, text, state) {
     let note = el.querySelector('[role="status"]');
