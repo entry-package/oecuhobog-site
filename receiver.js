@@ -1,7 +1,7 @@
 /* 受付の保存結果を確認し、フォーム内に表示する。 */
 (() => {
   'use strict';
-  const endpoint = 'https://script.google.com/macros/s/AKfycbzmHWKRsZ-dXaVU1sQqOcDW6tDToC82-dPK_w-MeSSFR43cK5fkMRYlAOdLa6k9-w/exec';
+  const endpoint = 'https://script.google.com/macros/s/AKfycbwzWJG-N5DHydBzOLgXtcJFS85qNCgtdX2Gs-0H8k9SSNfVtpysYQZGamRxNilWTz2m/exec';
   const requests = new WeakMap();
   function status(el, text, state) {
     let note = el.querySelector('[role="status"]');
@@ -16,6 +16,26 @@
       if (active) { button.dataset.originalText = button.textContent; button.disabled = true; button.textContent = '送信中…'; }
       else { button.disabled = false; button.textContent = button.dataset.originalText || button.textContent; }
     });
+  }
+  const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+  async function finishDelivery(el, pending, baseMessage, email) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const response = await fetch(endpoint, {
+          method:'POST', credentials:'omit', redirect:'follow', keepalive:true,
+          body:new URLSearchParams({action:'notify', requestId:pending.requestId, email, format:'json'}),
+        });
+        if (!response.ok) throw new Error('unconfirmed');
+        const result = await response.json();
+        if (!result.saved || result.receipt !== pending.requestId || !result.notified || !result.confirmationSent) throw new Error('unconfirmed');
+        pending.message = baseMessage + ' ご入力のメールアドレスへ受付完了メールを送信しました。 受付番号：' + result.receipt;
+        pending.state = 'success'; status(el, pending.message, pending.state); return;
+      } catch (_) {
+        if (attempt < 2) await delay(700 * (attempt + 1));
+      }
+    }
+    pending.message = baseMessage + ' 受付内容は保存されていますが、メール通知を確認できていません。お急ぎの場合は info@package-inc.com へご連絡ください。 受付番号：' + pending.requestId;
+    pending.state = 'warning'; status(el, pending.message, pending.state);
   }
   async function submitElement(el) {
     if (el.getAttribute('aria-busy') === 'true') return;
@@ -49,18 +69,23 @@
     try {
       const response = await fetch(endpoint, {
         method:'POST', credentials:'omit', redirect:'follow', signal:controller.signal,
-        body:new URLSearchParams({...fields, requestId:pending.requestId, format:'json'}),
+        body:new URLSearchParams({...fields, action:'save', requestId:pending.requestId, format:'json'}),
       });
       if (!response.ok) throw new Error('unconfirmed');
       const result = await response.json();
-      if (!result.saved || result.receipt !== pending.requestId || result.kind !== kind || typeof result.notified !== 'boolean') throw new Error('unconfirmed');
-      let message = kind === 'comment' ? 'コメントを受け付けました。内容確認後に掲載します。' :
+      if (!result.saved || result.receipt !== pending.requestId || result.kind !== kind || typeof result.notified !== 'boolean' || typeof result.confirmationSent !== 'boolean' || typeof result.deliveryPending !== 'boolean') throw new Error('unconfirmed');
+      const baseMessage = kind === 'comment' ? 'コメントを受け付けました。内容確認後に掲載します。' :
         kind === 'subscription' ? '読者登録の申請を受け付けました。配信開始までに確認が必要です。' :
           'お問い合わせを受け付けました。内容を確認のうえ、担当者からご連絡します。';
-      if (!result.notified) message += ' 受付内容は保存されていますが、担当者への通知を確認できていません。お急ぎの場合は info@package-inc.com へご連絡ください。';
-      message += ' 受付番号：' + result.receipt;
-      pending.completed = true; pending.message = message; pending.state = result.notified ? 'success' : 'warning';
-      status(el, message, pending.state);
+      pending.completed = true;
+      if (result.deliveryPending) {
+        pending.message = baseMessage + ' 受付完了メールを送信しています。 受付番号：' + result.receipt;
+        pending.state = 'success'; status(el, pending.message, pending.state);
+        void finishDelivery(el, pending, baseMessage, fields.email);
+      } else {
+        pending.message = baseMessage + (result.notified && result.confirmationSent ? ' ご入力のメールアドレスへ受付完了メールを送信しました。' : ' メール通知を確認できていません。') + ' 受付番号：' + result.receipt;
+        pending.state = result.notified && result.confirmationSent ? 'success' : 'warning'; status(el, pending.message, pending.state);
+      }
     } catch (_) {
       status(el, '受付結果を確認できませんでした。入力内容は残っています。そのまま再度送信してください。お急ぎの場合は info@package-inc.com へご連絡ください。', 'error');
     } finally { clearTimeout(timer); busy(el, false); }
