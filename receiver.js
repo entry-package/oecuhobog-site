@@ -1,7 +1,7 @@
-/* 本番には未組み込み。匿名 Web アプリの保存・受信検証後に endpoint を設定する。 */
+/* GAS 受付接続。実際の接続先は prepare-receiver-preview.py で設定する。 */
 (() => {
   'use strict';
-  const endpoint = "https://script.google.com/a/macros/package-inc.com/s/AKfycbz26G8W0ivNCaDb_bs7KqIKNkutZUgAIXsdKv1lt3A7K4m26CS2Tzop9Micz6wR1MrV/exec";
+  const endpoint = "https://script.google.com/macros/s/AKfycbz26G8W0ivNCaDb_bs7KqIKNkutZUgAIXsdKv1lt3A7K4m26CS2Tzop9Micz6wR1MrV/exec";
   const previous = new WeakMap();
   function status(el, text) {
     let note = el.querySelector('[role="status"]');
