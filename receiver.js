@@ -10,13 +10,6 @@
     note.dataset.state = state;
     note.textContent = text;
   }
-  function busy(el, active) {
-    el.setAttribute('aria-busy', String(active));
-    el.querySelectorAll('button').forEach(button => {
-      if (active) { button.dataset.originalText = button.textContent; button.disabled = true; button.textContent = '送信中…'; }
-      else { button.disabled = false; button.textContent = button.dataset.originalText || button.textContent; }
-    });
-  }
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   async function finishDelivery(el, pending, baseMessage, email) {
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -38,7 +31,6 @@
     pending.state = 'warning'; status(el, pending.message, pending.state);
   }
   async function submitElement(el) {
-    if (el.getAttribute('aria-busy') === 'true') return;
     const value = selector => el.querySelector(selector)?.value?.trim() || '';
     const kind = el.matches('.s-email-form') ? 'contact' : el.matches('.s-blog-subscription') ? 'subscription' : 'comment';
     if (kind === 'subscription' && !el.querySelector('[name="readerConsent"]:checked')) {
@@ -62,13 +54,18 @@
     if (!pending || pending.fingerprint !== fingerprint) {
       pending = {fingerprint, requestId: crypto.randomUUID()}; requests.set(el, pending);
     }
+    if (pending.inFlight) { status(el, pending.message, pending.state); return; }
     if (pending.completed) { status(el, pending.message, pending.state); return; }
-    busy(el, true); status(el, '送信しています。このままお待ちください。', 'sending');
+    pending.inFlight = true;
+    pending.message = '送信操作を受け付けました。受付番号を確認しています。';
+    pending.state = 'sending';
+    el.setAttribute('aria-busy', 'true');
+    status(el, pending.message, pending.state);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 45000);
     try {
       const response = await fetch(endpoint, {
-        method:'POST', credentials:'omit', redirect:'follow', signal:controller.signal,
+        method:'POST', credentials:'omit', redirect:'follow', signal:controller.signal, keepalive:true,
         body:new URLSearchParams({...fields, action:'save', requestId:pending.requestId, format:'json'}),
       });
       if (!response.ok) throw new Error('unconfirmed');
@@ -88,7 +85,11 @@
       }
     } catch (_) {
       status(el, '受付結果を確認できませんでした。入力内容は残っています。そのまま再度送信してください。お急ぎの場合は info@package-inc.com へご連絡ください。', 'error');
-    } finally { clearTimeout(timer); busy(el, false); }
+    } finally {
+      clearTimeout(timer);
+      pending.inFlight = false;
+      el.setAttribute('aria-busy', 'false');
+    }
   }
   window.OecuhobogReceiver = Object.freeze({submitElement});
 })();
