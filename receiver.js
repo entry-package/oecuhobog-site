@@ -11,6 +11,13 @@
     note.textContent = text;
   }
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const receiptNote = ' 現在、受付完了メールの自動送信を停止しています。受付番号をお控えください。';
+  function completeMessage(baseMessage, result) {
+    return baseMessage + (result.underReview ? ' 内容を確認してから対応します。' : '') +
+      (result.receiptPolicy === 'disabled' ? receiptNote :
+        result.confirmationSent ? ' ご入力のメールアドレスへ受付完了メールを送信しました。' : ' メール通知を確認できていません。') +
+      ' 受付番号：' + result.receipt;
+  }
   async function finishDelivery(el, pending, baseMessage, email) {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -20,8 +27,9 @@
         });
         if (!response.ok) throw new Error('unconfirmed');
         const result = await response.json();
-        if (!result.saved || result.receipt !== pending.requestId || !result.notified || !result.confirmationSent) throw new Error('unconfirmed');
-        pending.message = baseMessage + ' ご入力のメールアドレスへ受付完了メールを送信しました。 受付番号：' + result.receipt;
+        if (!result.saved || result.receipt !== pending.requestId ||
+          !(result.underReview || result.notified && (result.confirmationSent || result.receiptPolicy === 'disabled'))) throw new Error('unconfirmed');
+        pending.message = completeMessage(baseMessage, result);
         pending.state = 'success'; status(el, pending.message, pending.state); return;
       } catch (_) {
         if (attempt < 2) await delay(700 * (attempt + 1));
@@ -76,12 +84,12 @@
           'お問い合わせを受け付けました。内容を確認のうえ、担当者からご連絡します。';
       pending.completed = true;
       if (result.deliveryPending) {
-        pending.message = baseMessage + ' 受付完了メールを送信しています。 受付番号：' + result.receipt;
+        pending.message = baseMessage + (result.receiptPolicy === 'disabled' ? ' 担当者への通知を確認しています。' : ' 受付完了メールを送信しています。') + ' 受付番号：' + result.receipt;
         pending.state = 'success'; status(el, pending.message, pending.state);
         void finishDelivery(el, pending, baseMessage, fields.email);
       } else {
-        pending.message = baseMessage + (result.notified && result.confirmationSent ? ' ご入力のメールアドレスへ受付完了メールを送信しました。' : ' メール通知を確認できていません。') + ' 受付番号：' + result.receipt;
-        pending.state = result.notified && result.confirmationSent ? 'success' : 'warning'; status(el, pending.message, pending.state);
+        pending.message = completeMessage(baseMessage, result);
+        pending.state = result.underReview || result.notified && (result.confirmationSent || result.receiptPolicy === 'disabled') ? 'success' : 'warning'; status(el, pending.message, pending.state);
       }
     } catch (_) {
       status(el, '受付結果を確認できませんでした。入力内容は残っています。そのまま再度送信してください。お急ぎの場合は info@package-inc.com へご連絡ください。', 'error');
