@@ -13,7 +13,7 @@
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   const receiptNote = ' 現在、受付完了メールの自動送信を停止しています。受付番号をお控えください。';
   function completeMessage(baseMessage, result) {
-    return baseMessage + (result.underReview ? ' 内容を確認してから対応します。' : '') +
+    return (result.underReview ? '受付内容を保存しました。内容を確認してから対応します。' : baseMessage) +
       (result.receiptPolicy === 'disabled' ? receiptNote :
         result.confirmationSent ? ' ご入力のメールアドレスへ受付完了メールを送信しました。' : ' メール通知を確認できていません。') +
       ' 受付番号：' + result.receipt;
