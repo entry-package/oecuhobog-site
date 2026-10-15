@@ -4,36 +4,46 @@
   const endpoint = 'https://script.google.com/macros/s/AKfycbwzWJG-N5DHydBzOLgXtcJFS85qNCgtdX2Gs-0H8k9SSNfVtpysYQZGamRxNilWTz2m/exec';
   const requests = new WeakMap();
   let securityConfig, turnstileScript;
+  function verificationError(code) {
+    const error=new Error('verification_failed');error.verificationCode=code;return error;
+  }
+  function bounded(promise,ms,code) {
+    return new Promise((resolve,reject)=>{
+      const timeout=setTimeout(()=>reject(verificationError(code)),ms);
+      promise.then(value=>{clearTimeout(timeout);resolve(value);},()=>{clearTimeout(timeout);reject(verificationError(code));});
+    });
+  }
   async function requestHumanProof(el,kind,requestId) {
-    securityConfig ||= fetch('/receiver-security.json',{credentials:'omit',cache:'no-store'}).then(async r=>{
+    securityConfig ||= bounded(fetch('/receiver-security.json',{credentials:'omit',cache:'no-store'}).then(async r=>{
       if(!r.ok)throw Error('verification_unavailable');
       const c=await r.json();
       if(!/^0x[A-Za-z0-9_-]{10,100}$/.test(c.turnstileSiteKey||''))throw Error('verification_unconfigured');
       return c;
-    }).catch(error=>{securityConfig=null;throw error;});
+    }),20000,'configuration_unavailable').catch(error=>{securityConfig=null;throw error;});
     const config=await securityConfig;
     if(!window.turnstile) {
-      turnstileScript ||= new Promise((resolve,reject)=>{
+      turnstileScript ||= bounded(new Promise((resolve,reject)=>{
         const script=document.createElement('script');
         script.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
         script.async=true;script.onload=resolve;script.onerror=reject;document.head.append(script);
-      }).catch(error=>{turnstileScript=null;throw error;});
+      }),20000,'script_unavailable').catch(error=>{turnstileScript=null;throw error;});
       await turnstileScript;
     }
-    if(!window.turnstile)throw Error('verification_unavailable');
+    if(!window.turnstile||typeof window.turnstile.ready!=='function')throw verificationError('sdk_unavailable');
+    await bounded(new Promise(resolve=>window.turnstile.ready(resolve)),10000,'sdk_not_ready');
     let box=el.querySelector('.receiver-human-check');
     if(!box){box=document.createElement('div');box.className='receiver-human-check';el.append(box);}
     return new Promise((resolve,reject)=>{
       let widget,settled=false;
-      const finish=(error,token)=>{
+      const finish=(error,token,code)=>{
         if(settled)return;settled=true;clearTimeout(timeout);
         if(widget!==undefined)window.turnstile.remove(widget);
-        error?reject(Error('verification_failed')):resolve(token);
+        error?reject(verificationError(code||'challenge_failed')):resolve(token);
       };
-      const timeout=setTimeout(()=>finish(true),120000);
+      const timeout=setTimeout(()=>finish(true,undefined,'challenge_timeout'),120000);
       try { widget=window.turnstile.render(box,{sitekey:config.turnstileSiteKey,action:kind,cData:requestId,
-        callback:token=>finish(false,token),'error-callback':()=>{finish(true);return true;},
-        'expired-callback':()=>finish(true),'timeout-callback':()=>finish(true)}); } catch (_) {finish(true);}
+        callback:token=>finish(false,token),'error-callback':code=>{finish(true,undefined,/^[0-9]{6}$/.test(String(code))?'challenge_'+code:'challenge_failed');return true;},
+        'expired-callback':()=>finish(true,undefined,'challenge_expired'),'timeout-callback':()=>finish(true,undefined,'challenge_timeout')}); } catch (_) {finish(true,undefined,'widget_unavailable');}
     });
   }
 
@@ -128,8 +138,9 @@
         pending.message = completeMessage(baseMessage, result);
         pending.state = result.underReview || result.notified && (result.confirmationSent || result.subscriptionHandled || result.receiptPolicy === 'disabled') ? 'success' : 'warning'; status(el, pending.message, pending.state);
       }
-    } catch (_) {
-      status(el, '送信前の確認または受付結果を確認できませんでした。入力内容は残っています。そのまま再度送信してください。お急ぎの場合は info@package-inc.com へご連絡ください。', 'error');
+    } catch (error) {
+      const code=/^(configuration_unavailable|script_unavailable|sdk_unavailable|sdk_not_ready|widget_unavailable|challenge_failed|challenge_timeout|challenge_expired|challenge_[0-9]{6})$/.test(error?.verificationCode||'')?error.verificationCode:'reception_unconfirmed';
+      status(el, '送信前の確認または受付結果を確認できませんでした。入力内容は残っています。そのまま再度送信してください。お急ぎの場合は info@package-inc.com へご連絡ください。 確認コード：'+code, 'error');
     } finally {
       clearTimeout(timer);
       pending.inFlight = false;
